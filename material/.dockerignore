@@ -1,0 +1,23 @@
+# Excluye del contexto de construcción (build de la imagen nginx):
+# más rápido y sin basura en la imagen.
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+
+# Datos locales del despliegue (nunca en la imagen)
+data/
+
+# Datos de la capa PostgreSQL: los usa el servicio "db", no las imágenes
+db/
+
+# Ampliaciones opcionales (SPAs): no forman parte del despliegue principal
+spa/
+
+# Control de versiones y documentación local
+.git/
+.gitignore
+*.md
+.env

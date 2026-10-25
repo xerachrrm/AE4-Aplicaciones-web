@@ -1,0 +1,118 @@
+# Despliegue de la aplicación de ejemplo (curso DPL, UT4)
+# Servicios: db (PostgreSQL), pgadmin, django (Gunicorn + Django) y nginx.
+# Uso: docker compose up -d    Comprobación automática: ./check.sh
+# Formato: Compose v2 (orientativo).
+#
+# Credenciales: NUNCA en el repositorio. Las contraseñas se leen del entorno
+# con un valor de ejemplo por defecto (CAMBIAR_ESTO). Para usar las tuyas:
+#   export DB_PASSWORD="..."  PGADMIN_PASSWORD="..."   (o un fichero .env)
+
+name: dpl-app
+
+services:
+  # Servicio "db": capa de datos PostgreSQL. La aplicación se conecta por la
+  # red interna de Compose con el nombre del servicio ("db"); el puerto 5432
+  # NO se publica al anfitrión (solo lo usa la red interna).
+  db:
+    image: postgres:16-alpine          # versión orientativa
+    container_name: dpl-db
+    environment:
+      POSTGRES_DB: travelroad
+      POSTGRES_USER: alumno
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-CAMBIAR_ESTO}
+    volumes:
+      # Datos persistentes (volumen con nombre: sobrevive a `down`)
+      - db-data:/var/lib/postgresql/data
+      # Carga inicial: solo se ejecuta al crear el volumen por primera vez
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # pg_isready comprueba que PostgreSQL acepta conexiones
+      test: ["CMD-SHELL", "pg_isready -U alumno -d travelroad"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Servicio "pgadmin": interfaz web para administrar PostgreSQL.
+  # Acceso: http://localhost:5050 (usuario y contraseña por variables de
+  # entorno; valores de ejemplo). Teoría: ../teoria/base-datos.md
+  pgadmin:
+    image: dpage/pgadmin4:9.17         # versión orientativa
+    container_name: dpl-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-alumno@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-CAMBIAR_ESTO}
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"               # anfitrión:contenedor
+    depends_on:
+      db:
+        condition: service_healthy   # no arranca hasta que PostgreSQL está sano
+    healthcheck:
+      # pgAdmin expone /misc/ping (devuelve "PING" cuando está listo)
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80/misc/ping | grep -q PING"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Servicio "django": servidor de aplicaciones (Gunicorn + Django).
+  # Escucha en el puerto INTERNO 8000; no se publica al anfitrión:
+  # la puerta de entrada es el servidor Web (nginx).
+  django:
+    build: ./app               # contexto app/ (usa app/Dockerfile)
+    container_name: dpl-django
+    environment:
+      # Configuración por variables de entorno (sin credenciales reales)
+      APP_MENSAJE: "Hola desde el servidor de aplicaciones DPL (UT4)"
+      APP_DATA_DIR: /data
+      # Capa de datos: la app usa PostgreSQL si DB_HOST está definida
+      DB_HOST: db
+      DB_NAME: travelroad
+      DB_USER: alumno
+      DB_PASSWORD: ${DB_PASSWORD:-CAMBIAR_ESTO}
+      # Directorio LDAP (UT5): si LDAP_HOST está definida, /api/login autentica
+      # contra el servicio de directorio. Valores de ejemplo; exporta el tuyo:
+      #   export LDAP_HOST="ldap://IP_DPL_LAB"
+      LDAP_HOST: ${LDAP_HOST:-}
+      LDAP_BASE_DN: "ou=usuarios,dc=dpl,dc=local"
+      LDAP_USER_FILTER: "(uid=%s)"
+    volumes:
+      # Persistencia en el anfitrión: ./data queda en tu equipo y es editable.
+      # En Linux, si la app no puede escribir en ./data, ejecuta:
+      #   sudo chown -R 1000:1000 data
+      - ./data:/data
+    depends_on:
+      db:
+        condition: service_healthy   # espera a que PostgreSQL esté listo
+    healthcheck:
+      # Comprueba /healthz cada 15 s con el propio python de la imagen
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped     # se relanza solo si muere; no al apagar el equipo
+
+  # Servicio "nginx": servidor Web y proxy inverso. Sirve el build de Vite
+  # (frontend/dist) y reenvía /api/ y /healthz al servicio "django".
+  # Único puerto publicado al anfitrión: 8000 -> 80.
+  nginx:
+    build:
+      context: .                # contexto raíz: copia frontend/dist
+      dockerfile: nginx/Dockerfile.nginx
+    container_name: dpl-nginx
+    ports:
+      - "8000:80"               # anfitrión:contenedor
+    depends_on:
+      django:
+        condition: service_healthy   # no arranca hasta que django esté sano
+    restart: unless-stopped
+
+# Volúmenes con nombre (persisten a `docker compose down`; se borran con `down -v`)
+volumes:
+  db-data:
+  pgadmin-data:

@@ -1,0 +1,17 @@
+=== 1. ESTADO DE LOS CONTENEDORES (docker compose ps) ===
+NAME             IMAGE                 COMMAND                  SERVICE   CREATED         STATUS                   PORTS
+dpl-app-django   dpl-app-app           "gunicorn config.wsg…"   app       9 minutes ago   Up 9 minutes (healthy)   8000/tcp
+dpl-db           postgres:16-alpine    "docker-entrypoint.s…"   db        9 minutes ago   Up 9 minutes (healthy)   5432/tcp
+dpl-nginx        nginx:1.27-alpine     "/docker-entrypoint.…"   nginx     9 minutes ago   Up 28 seconds            0.0.0.0:8000->80/tcp, [::]:8000->80/tcp
+dpl-pgadmin      dpage/pgadmin4:9.17   "/entrypoint.sh"         pgadmin   9 minutes ago   Up 9 minutes (healthy)   443/tcp, 0.0.0.0:5050->80/tcp, [::]:5050->80/tcp
+
+=== 2. COMPROBACIÓN DE SALUD (/healthz) ===
+{"status": "ok", "hostname": "8b2bf1b7ffed"}
+=== 3. RESPUESTA DE LA API (/api/lugares) ===
+{"lugares": [{"id": 1, "name": "Tokio", "visited": false}, {"id": 2, "name": "Budapest", "visited": true}, {"id": 3, "name": "Nairobi", "visited": false}, {"id": 4, "name": "Berl\u00edn", "visited": true}, {"id": 5, "name": "Lisboa", "visited": true}, {"id": 6, "name": "Denver", "visited": false}, {"id": 7, "name": "Mosc\u00fa", "visited": false}, {"id": 8, "name": "Oslo", "visited": false}, {"id": 9, "name": "R\u00edo", "visited": true}, {"id": 10, "name": "Cincinnati", "visited": false}, {"id": 11, "name": "Helsinki", "visited": false}], "total": 11}
+=== 4. VERIFICACIÓN DE DATOS EN POSTGRESQL (11 filas) ===
+ count 
+-------
+    11
+(1 row)
+
